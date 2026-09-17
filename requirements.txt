@@ -1,4 +1,5 @@
 Flask
-Flask-Cors
-supabase
+Flask-CORS
 python-dotenv
+supabase
+google-genai
