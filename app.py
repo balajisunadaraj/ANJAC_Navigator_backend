@@ -17,6 +17,7 @@ gemini_client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 print("Gemini API key loaded:", bool(os.getenv("GEMINI_API_KEY")))
+
 # ============================================================
 # Supabase configuration
 # ============================================================
@@ -344,6 +345,77 @@ def get_events():
             "error": str(e)
         }), 500
 
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    try:
+        data = request.get_json()
+
+        user_message = data.get("message", "").strip()
+
+        if not user_message:
+            return jsonify({
+                "success": False,
+                "error": "Message is required"
+            }), 400
+
+        response = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction="""
+You are the AI assistant for ANJAC Campus Navigator.
+
+You help students navigate Ayya Nadar Janaki Ammal College campus.
+
+You can:
+- Answer questions about campus navigation.
+- Help users choose destinations.
+- Ask the user's current location when navigation is requested.
+- Explain campus locations clearly.
+- Provide short and friendly responses.
+
+Known campus locations:
+Gate
+M Block
+C Block
+Admin Block
+Statue
+Library
+W Block
+G Block
+Auditorium
+Indoor
+Canteen 1
+Canteen 2
+N Block
+B Hostel
+G Hostel
+E Block
+PHS
+
+Important:
+- Do not invent campus locations.
+- Do not invent routes.
+- Do not claim that navigation has started unless the application actually starts it.
+- If you do not know something, say so.
+- Keep responses concise because this response may be spoken aloud by the voice assistant.
+"""
+            )
+        )
+
+        return jsonify({
+            "success": True,
+            "reply": response.text
+        })
+
+    except Exception as e:
+        print("Gemini error:", str(e))
+
+        return jsonify({
+            "success": False,
+            "error": "Gemini request failed"
+        }), 500
+    
 # ============================================================
 # Start Flask Server
 # ============================================================
