@@ -6,17 +6,30 @@ import os
 
 from google import genai
 from google.genai import types
+
+
 # ============================================================
 # Load environment variables
 # ============================================================
 
 load_dotenv()
 
-#GEMINI_API_KEY INITIALIZATION
+
+# ============================================================
+# Gemini configuration
+# ============================================================
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+print("Gemini API key loaded:", bool(GEMINI_API_KEY))
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY is missing in .env or Render Environment Variables")
+
 gemini_client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
+    api_key=GEMINI_API_KEY
 )
-print("Gemini API key loaded:", bool(os.getenv("GEMINI_API_KEY")))
+
 
 # ============================================================
 # Supabase configuration
@@ -24,20 +37,28 @@ print("Gemini API key loaded:", bool(os.getenv("GEMINI_API_KEY")))
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-FLASK_PORT = int(os.getenv("FLASK_PORT", 5000))
+
+FLASK_PORT = int(
+    os.getenv("PORT", os.getenv("FLASK_PORT", 5000))
+)
+
 
 if not SUPABASE_URL:
     raise RuntimeError("SUPABASE_URL is missing in .env")
 
+
 if not SUPABASE_KEY:
     raise RuntimeError("SUPABASE_KEY is missing in .env")
+
 
 # ============================================================
 # Create Flask application
 # ============================================================
 
 app = Flask(__name__)
+
 CORS(app)
+
 
 # ============================================================
 # Connect to Supabase
@@ -48,11 +69,12 @@ supabase = create_client(
     SUPABASE_KEY
 )
 
+
 # ============================================================
 # Test Flask
 # ============================================================
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
 
     return jsonify({
@@ -85,6 +107,8 @@ def get_locations():
 
     except Exception as e:
 
+        print("LOCATION ERROR:", str(e))
+
         return jsonify({
             "success": False,
             "error": str(e)
@@ -94,16 +118,16 @@ def get_locations():
 # ============================================================
 # Get Route
 #
-# Supports BOTH:
+# Supports:
 #
 # 1. Normal route
-#       M Block → C Block
+#       M Block -> C Block
 #
 # 2. Reverse route
-#       C Block → M Block
+#       C Block -> M Block
 #
-# If the reverse route is selected, the same route is used
-# and its route points are reversed.
+# If reverse route is selected,
+# route points are reversed.
 # ============================================================
 
 @app.route("/api/route", methods=["GET"])
@@ -147,7 +171,7 @@ def get_route():
 
         # ====================================================
         # STEP 1
-        # Search for the normal route
+        # Search for normal route
         # ====================================================
 
         route_response = (
@@ -170,8 +194,7 @@ def get_route():
 
         # ====================================================
         # STEP 2
-        # If normal route does not exist,
-        # search for the reverse route
+        # Search reverse route if normal route not found
         # ====================================================
 
         if not route_response.data:
@@ -182,7 +205,6 @@ def get_route():
             route_response = (
                 supabase
                 .table("routes")
-                
                 .select("*")
                 .eq(
                     "current_location_id",
@@ -196,7 +218,6 @@ def get_route():
                 .execute()
             )
 
-            # Mark that the route needs to be reversed
             if route_response.data:
 
                 reversed_route = True
@@ -205,7 +226,7 @@ def get_route():
 
         # ====================================================
         # STEP 3
-        # If neither route exists
+        # Route not found
         # ====================================================
 
         if not route_response.data:
@@ -219,7 +240,7 @@ def get_route():
 
         # ====================================================
         # STEP 4
-        # Get the route
+        # Get route
         # ====================================================
 
         route = route_response.data[0]
@@ -252,7 +273,7 @@ def get_route():
 
         # ====================================================
         # STEP 6
-        # Reverse route points if required
+        # Reverse route points if necessary
         # ====================================================
 
         if reversed_route:
@@ -263,7 +284,7 @@ def get_route():
 
         # ====================================================
         # STEP 7
-        # Print route points for debugging
+        # Print route points
         # ====================================================
 
         print("Route points:")
@@ -280,7 +301,7 @@ def get_route():
 
         # ====================================================
         # STEP 8
-        # Return route to Unity
+        # Return route
         # ====================================================
 
         return jsonify({
@@ -299,12 +320,17 @@ def get_route():
 
     except Exception as e:
 
-        print("ERROR:", str(e))
+        print("ROUTE ERROR:", str(e))
 
         return jsonify({
             "success": False,
             "error": str(e)
         }), 500
+
+
+# ============================================================
+# Get Campus Events
+# ============================================================
 
 @app.route("/api/events", methods=["GET"])
 def get_events():
@@ -324,16 +350,25 @@ def get_events():
         for event in response.data:
 
             events.append({
+
                 "id": event.get("id"),
+
                 "title": event.get("title"),
+
                 "date": event.get("date"),
+
                 "location": event.get("location"),
+
                 "description": event.get("description")
+
             })
 
         return jsonify({
+
             "success": True,
+
             "events": events
+
         })
 
     except Exception as e:
@@ -341,40 +376,94 @@ def get_events():
         print("EVENT ERROR:", str(e))
 
         return jsonify({
+
             "success": False,
+
             "error": str(e)
+
         }), 500
+
+
+# ============================================================
+# Gemini AI Chat
+# ============================================================
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
+
     try:
+
+        # ----------------------------------------------------
+        # Get JSON data
+        # ----------------------------------------------------
+
         data = request.get_json()
 
-        user_message = data.get("message", "").strip()
+        if not data:
+
+            return jsonify({
+                "success": False,
+                "error": "JSON body is required"
+            }), 400
+
+        # ----------------------------------------------------
+        # Get user message
+        # ----------------------------------------------------
+
+        user_message = data.get(
+            "message",
+            ""
+        ).strip()
+
+        # ----------------------------------------------------
+        # Validate message
+        # ----------------------------------------------------
 
         if not user_message:
+
             return jsonify({
                 "success": False,
                 "error": "Message is required"
             }), 400
 
+        print("------------------------------------------")
+        print("Gemini request received")
+        print("User message:", user_message)
+
+        # ====================================================
+        # Gemini request
+        # ====================================================
+
         response = gemini_client.models.generate_content(
+
             model="gemini-2.5-flash",
+
             contents=user_message,
+
             config=types.GenerateContentConfig(
+
                 system_instruction="""
+
 You are the AI assistant for ANJAC Campus Navigator.
 
-You help students navigate Ayya Nadar Janaki Ammal College campus.
+You help students navigate
+Ayya Nadar Janaki Ammal College campus.
 
-You can:
-- Answer questions about campus navigation.
-- Help users choose destinations.
-- Ask the user's current location when navigation is requested.
-- Explain campus locations clearly.
-- Provide short and friendly responses.
+Your responsibilities:
+
+1. Answer questions about the campus.
+
+2. Help students select a destination.
+
+3. When the user wants navigation,
+   ask for their current location if it is not known.
+
+4. Explain campus locations clearly.
+
+5. Keep responses short and friendly.
 
 Known campus locations:
+
 Gate
 M Block
 C Block
@@ -393,30 +482,75 @@ G Hostel
 E Block
 PHS
 
-Important:
+Important rules:
+
 - Do not invent campus locations.
 - Do not invent routes.
-- Do not claim that navigation has started unless the application actually starts it.
-- If you do not know something, say so.
-- Keep responses concise because this response may be spoken aloud by the voice assistant.
+- Do not invent buildings.
+- Do not claim that navigation has started.
+- The Unity application is responsible for starting navigation.
+- If you do not know something, clearly say that you do not know.
+- Keep responses concise because the response may be spoken aloud.
+- Be helpful and conversational.
+- Do not provide unnecessary long explanations.
+
+Example:
+
+User:
+Where is the library?
+
+Assistant:
+The Library is one of the main locations on the ANJAC campus.
+
+User:
+I want to go to the library.
+
+Assistant:
+Sure! What is your current location?
+
 """
+
             )
+
         )
 
+        # ====================================================
+        # Get Gemini response
+        # ====================================================
+
+        reply = response.text
+
+        print("Gemini reply:", reply)
+
+        print("------------------------------------------")
+
         return jsonify({
+
             "success": True,
-            "reply": response.text
+
+            "reply": reply
+
         })
 
     except Exception as e:
-    print("==========================================")
-    print("GEMINI ERROR:", repr(e))
-    print("==========================================")
 
-    return jsonify({
-        "success": False,
-        "error": str(e)
-    }), 500
+        # ====================================================
+        # Gemini error logging
+        # ====================================================
+
+        print("==========================================")
+        print("GEMINI ERROR:")
+        print(repr(e))
+        print("==========================================")
+
+        return jsonify({
+
+            "success": False,
+
+            "error": str(e)
+
+        }), 500
+
 
 # ============================================================
 # Start Flask Server
@@ -430,7 +564,11 @@ if __name__ == "__main__":
     print("==========================================")
 
     app.run(
+
         host="0.0.0.0",
+
         port=FLASK_PORT,
-        debug=True
+
+        debug=False
+
     )
