@@ -409,13 +409,15 @@ Important:
         })
 
     except Exception as e:
-        print("Gemini error:", str(e))
+    print("==========================================")
+    print("GEMINI ERROR:", repr(e))
+    print("==========================================")
 
-        return jsonify({
-            "success": False,
-            "error": "Gemini request failed"
-        }), 500
-    
+    return jsonify({
+        "success": False,
+        "error": str(e)
+    }), 500
+
 # ============================================================
 # Start Flask Server
 # ============================================================
