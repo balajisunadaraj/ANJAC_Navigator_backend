@@ -4,12 +4,19 @@ from supabase import create_client
 from dotenv import load_dotenv
 import os
 
+from google import genai
+from google.genai import types
 # ============================================================
 # Load environment variables
 # ============================================================
 
 load_dotenv()
 
+#GEMINI_API_KEY INITIALIZATION
+gemini_client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
+print("Gemini API key loaded:", bool(os.getenv("GEMINI_API_KEY")))
 # ============================================================
 # Supabase configuration
 # ============================================================
